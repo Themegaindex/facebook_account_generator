@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <title>النتائج</title>
+</head>
+<body>
+    <h2>تم إنشاء الحسابات:</h2>
+    {% for r in results %}
+        <hr>
+        <p><strong>الإيميل:</strong> {{ r.email }}</p>
+        <p><strong>الاسم:</strong> {{ r.name }}</p>
+        <p><strong>كلمة المرور:</strong> {{ r.password }}</p>
+        <p><strong>تاريخ الميلاد:</strong> {{ r.birthday }}</p>
+        <p><strong>الرد:</strong> {{ r.response }}</p>
+    {% endfor %}
+</body>
+</html>

@@ -1,15 +1,24 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>مولد حسابات فيسبوك</title>
+    <title>Facebook Account Generator</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
+        form { display: flex; flex-direction: column; gap: 10px; max-width: 300px; }
+        input, button { padding: 10px; }
+        button { cursor: pointer; }
+    </style>
 </head>
 <body>
-    <h2>إنشاء حسابات فيسبوك تجريبية</h2>
+    <h1>Facebook Account Generator</h1>
+    <p>Dieses Tool versucht, automatisch Konten zu erstellen.</p>
+    <p><strong>Warnung:</strong> Die Nutzung dieses Tools verstößt gegen die Nutzungsbedingungen von Facebook und wird wahrscheinlich nicht erfolgreich sein.</p>
+    <hr>
     <form action="/generate" method="POST">
-        <label>عدد الحسابات:</label>
-        <input type="number" name="count" min="1" max="5" required>
-        <button type="submit">ابدأ</button>
+        <label for="count">Anzahl der zu erstellenden Konten:</label>
+        <input type="number" id="count" name="count" min="1" max="5" value="1" required>
+        <button type="submit">Generierung starten</button>
     </form>
 </body>
 </html>

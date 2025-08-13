@@ -24,9 +24,12 @@ def create_mail_tm_account():
         password = fake.password()
         email = f"{username}@{domain}"
         payload = {"address": email, "password": password}
-        res = requests.post("https://api.mail.tm/accounts", json=payload)
-        if res.status_code == 201:
-            return email, password, fake.first_name(), fake.last_name(), fake.date_of_birth(minimum_age=18, maximum_age=45)
+        try:
+            res = requests.post("https://api.mail.tm/accounts", json=payload)
+            if res.status_code == 201:
+                return email, password, fake.first_name(), fake.last_name(), fake.date_of_birth(minimum_age=18, maximum_age=45)
+        except requests.RequestException:
+            pass
     return None, None, None, None, None
 
 def register_facebook_account(email, password, first_name, last_name, birthday):

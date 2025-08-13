@@ -4,10 +4,13 @@ import string
 import json
 import hashlib
 import time
+import logging
 from faker import Faker
 from flask import Flask, jsonify
 
 app = Flask(__name__)
+
+logging.basicConfig(level=logging.ERROR)
 
 # توليد سلسلة عشوائية
 def generate_random_string(length):
@@ -16,11 +19,13 @@ def generate_random_string(length):
 # جلب نطاقات البريد
 def get_mail_domains():
     try:
-        res = requests.get("https://api.mail.tm/domains")
+        res = requests.get("https://api.mail.tm/domains", timeout=10)
         return res.json()['hydra:member'] if res.status_code == 200 else None
+    except requests.Timeout as e:
+        logging.error(f'Domain Timeout: {e}')
     except Exception as e:
-        print(f'[×] Domain Error : {e}')
-        return None
+        logging.error(f'Domain Error: {e}')
+    return None
 
 # إنشاء بريد مؤقت
 def create_mail_tm_account():
@@ -33,24 +38,28 @@ def create_mail_tm_account():
         email = f"{username}@{domain}"
         payload = {"address": email, "password": password}
         try:
-            res = requests.post("https://api.mail.tm/accounts", json=payload)
+            res = requests.post("https://api.mail.tm/accounts", json=payload, timeout=10)
             if res.status_code == 201:
                 print(f'[√] Email Created: {email}')
                 return email, password, fake.first_name(), fake.last_name(), fake.date_of_birth(minimum_age=18, maximum_age=45)
             else:
-                print(f'[×] Account Creation Error: {res.text}')
+                logging.error(f'Account Creation Error: {res.text}')
+        except requests.Timeout as e:
+            logging.error(f'Account Timeout: {e}')
         except Exception as e:
-            print(f'[×] Account Exception: {e}')
+            logging.error(f'Account Exception: {e}')
     return None, None, None, None, None
 
 # تسجيل الدخول إلى البريد
 def login_mail_tm(email, password):
     try:
-        res = requests.post("https://api.mail.tm/token", json={"address": email, "password": password})
+        res = requests.post("https://api.mail.tm/token", json={"address": email, "password": password}, timeout=10)
         return res.json().get('token') if res.status_code == 200 else None
+    except requests.Timeout as e:
+        logging.error(f'Login Timeout: {e}')
     except Exception as e:
-        print(f'[×] Login Error: {e}')
-        return None
+        logging.error(f'Login Error: {e}')
+    return None
 
 # انتظار واستلام رسالة فيسبوك
 def get_inbox_and_verify(email, token):
@@ -58,19 +67,21 @@ def get_inbox_and_verify(email, token):
     print("[*] Waiting for Facebook email...")
     for _ in range(30):
         try:
-            res = requests.get("https://api.mail.tm/messages", headers=headers)
+            res = requests.get("https://api.mail.tm/messages", headers=headers, timeout=10)
             if res.status_code == 200:
                 messages = res.json().get('hydra:member', [])
                 for msg in messages:
                     if "facebook" in msg['from']['address'].lower():
                         msg_id = msg['id']
-                        msg_detail = requests.get(f"https://api.mail.tm/messages/{msg_id}", headers=headers)
+                        msg_detail = requests.get(f"https://api.mail.tm/messages/{msg_id}", headers=headers, timeout=10)
                         if msg_detail.status_code == 200:
                             content = msg_detail.json().get('text', '')
                             print(f'[+] Facebook Message:\n{content}')
                             return content
+        except requests.Timeout as e:
+            logging.error(f'Inbox Timeout: {e}')
         except Exception as e:
-            print(f'[×] Inbox Error: {e}')
+            logging.error(f'Inbox Error: {e}')
         time.sleep(5)
     print("[×] No Facebook message received.")
     return None
@@ -122,11 +133,13 @@ def _call(url, params, post=True):
         'User-Agent': '[FBAN/FB4A;FBAV/35.0.0.48.273;FBDM/{density=1.33125,width=800,height=1205};FBLC/en_US;FBPN/com.facebook.katana;FBDV/Nexus 7;FBSV/4.1.1;FBBK/0;]'
     }
     try:
-        res = requests.post(url, data=params, headers=headers) if post else requests.get(url, params=params, headers=headers)
+        res = requests.post(url, data=params, headers=headers, timeout=10) if post else requests.get(url, params=params, headers=headers, timeout=10)
         return res.json()
+    except requests.Timeout as e:
+        logging.error(f'API Call Timeout: {e}')
     except Exception as e:
-        print(f'[×] API Call Failed: {e}')
-        return {}
+        logging.error(f'API Call Failed: {e}')
+    return {}
 
 @app.route('/')
 def home():

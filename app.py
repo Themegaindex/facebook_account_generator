@@ -1,20 +1,26 @@
 from flask import Flask, render_template, request
 import requests, random, string, json, hashlib, time
+import logging
 from faker import Faker
 from datetime import datetime
 
 app = Flask(__name__)
 fake = Faker()
 
+logging.basicConfig(level=logging.ERROR)
+
 def generate_random_string(length):
     return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
 
 def get_mail_domains():
     try:
-        res = requests.get("https://api.mail.tm/domains")
+        res = requests.get("https://api.mail.tm/domains", timeout=10)
         return res.json()['hydra:member'] if res.status_code == 200 else None
-    except:
-        return None
+    except requests.Timeout as e:
+        logging.error(f'Domain Timeout: {e}')
+    except Exception as e:
+        logging.error(f'Domain Error: {e}')
+    return None
 
 def create_mail_tm_account():
     domains = get_mail_domains()
@@ -24,9 +30,16 @@ def create_mail_tm_account():
         password = fake.password()
         email = f"{username}@{domain}"
         payload = {"address": email, "password": password}
-        res = requests.post("https://api.mail.tm/accounts", json=payload)
-        if res.status_code == 201:
-            return email, password, fake.first_name(), fake.last_name(), fake.date_of_birth(minimum_age=18, maximum_age=45)
+        try:
+            res = requests.post("https://api.mail.tm/accounts", json=payload, timeout=10)
+            if res.status_code == 201:
+                return email, password, fake.first_name(), fake.last_name(), fake.date_of_birth(minimum_age=18, maximum_age=45)
+            else:
+                logging.error(f'Account Creation Error: {res.text}')
+        except requests.Timeout as e:
+            logging.error(f'Account Timeout: {e}')
+        except Exception as e:
+            logging.error(f'Account Error: {e}')
     return None, None, None, None, None
 
 def register_facebook_account(email, password, first_name, last_name, birthday):
@@ -61,10 +74,13 @@ def _call(url, params, post=True):
         'User-Agent': '[FBAN/FB4A;FBAV/35.0.0.48.273;FBDM/{density=1.33125,width=800,height=1205};FBLC/en_US;FBPN/com.facebook.katana;FBDV/Nexus 7;FBSV/4.1.1;FBBK/0;]'
     }
     try:
-        res = requests.post(url, data=params, headers=headers) if post else requests.get(url, params=params, headers=headers)
+        res = requests.post(url, data=params, headers=headers, timeout=10) if post else requests.get(url, params=params, headers=headers, timeout=10)
         return res.json()
-    except:
-        return {}
+    except requests.Timeout as e:
+        logging.error(f'API Call Timeout: {e}')
+    except Exception as e:
+        logging.error(f'API Call Failed: {e}')
+    return {}
 
 @app.route('/')
 def index():

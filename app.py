@@ -2,6 +2,7 @@ from flask import Flask, render_template, request
 import requests, random, string, json, hashlib, time
 from faker import Faker
 from datetime import datetime
+import logging
 
 app = Flask(__name__)
 fake = Faker()
@@ -13,8 +14,11 @@ def get_mail_domains():
     try:
         res = requests.get("https://api.mail.tm/domains")
         return res.json()['hydra:member'] if res.status_code == 200 else None
-    except:
-        return None
+    except requests.RequestException as e:
+        logging.error("Failed to get mail domains: %s", e)
+    except ValueError as e:
+        logging.error("Invalid response for mail domains: %s", e)
+    return None
 
 def create_mail_tm_account():
     domains = get_mail_domains()
@@ -63,8 +67,11 @@ def _call(url, params, post=True):
     try:
         res = requests.post(url, data=params, headers=headers) if post else requests.get(url, params=params, headers=headers)
         return res.json()
-    except:
-        return {}
+    except requests.RequestException as e:
+        logging.error("Request to %s failed: %s", url, e)
+    except ValueError as e:
+        logging.error("Invalid JSON from %s: %s", url, e)
+    return {}
 
 @app.route('/')
 def index():
@@ -87,7 +94,8 @@ def generate():
                     'response': fb_response
                 })
         return render_template('result.html', results=results)
-    except Exception as e:
+    except (ValueError, KeyError, requests.RequestException) as e:
+        logging.error("Error generating accounts: %s", e)
         return f"حدث خطأ: {str(e)}"
 
 if __name__ == '__main__':

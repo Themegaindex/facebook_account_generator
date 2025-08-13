@@ -6,6 +6,7 @@ import hashlib
 import time
 from faker import Faker
 from flask import Flask, jsonify
+import logging
 
 app = Flask(__name__)
 
@@ -18,9 +19,11 @@ def get_mail_domains():
     try:
         res = requests.get("https://api.mail.tm/domains")
         return res.json()['hydra:member'] if res.status_code == 200 else None
-    except Exception as e:
-        print(f'[×] Domain Error : {e}')
-        return None
+    except requests.RequestException as e:
+        logging.error("Domain request failed: %s", e)
+    except ValueError as e:
+        logging.error("Invalid domain response: %s", e)
+    return None
 
 # إنشاء بريد مؤقت
 def create_mail_tm_account():
@@ -35,12 +38,12 @@ def create_mail_tm_account():
         try:
             res = requests.post("https://api.mail.tm/accounts", json=payload)
             if res.status_code == 201:
-                print(f'[√] Email Created: {email}')
+                logging.info("Email Created: %s", email)
                 return email, password, fake.first_name(), fake.last_name(), fake.date_of_birth(minimum_age=18, maximum_age=45)
             else:
-                print(f'[×] Account Creation Error: {res.text}')
-        except Exception as e:
-            print(f'[×] Account Exception: {e}')
+                logging.error("Account creation error: %s", res.text)
+        except requests.RequestException as e:
+            logging.error("Account exception: %s", e)
     return None, None, None, None, None
 
 # تسجيل الدخول إلى البريد
@@ -48,14 +51,16 @@ def login_mail_tm(email, password):
     try:
         res = requests.post("https://api.mail.tm/token", json={"address": email, "password": password})
         return res.json().get('token') if res.status_code == 200 else None
-    except Exception as e:
-        print(f'[×] Login Error: {e}')
-        return None
+    except requests.RequestException as e:
+        logging.error("Login error: %s", e)
+    except ValueError as e:
+        logging.error("Invalid login response: %s", e)
+    return None
 
 # انتظار واستلام رسالة فيسبوك
 def get_inbox_and_verify(email, token):
     headers = {"Authorization": f"Bearer {token}"}
-    print("[*] Waiting for Facebook email...")
+    logging.info("Waiting for Facebook email...")
     for _ in range(30):
         try:
             res = requests.get("https://api.mail.tm/messages", headers=headers)
@@ -67,12 +72,14 @@ def get_inbox_and_verify(email, token):
                         msg_detail = requests.get(f"https://api.mail.tm/messages/{msg_id}", headers=headers)
                         if msg_detail.status_code == 200:
                             content = msg_detail.json().get('text', '')
-                            print(f'[+] Facebook Message:\n{content}')
+                            logging.info("Facebook Message:\n%s", content)
                             return content
-        except Exception as e:
-            print(f'[×] Inbox Error: {e}')
+        except requests.RequestException as e:
+            logging.error("Inbox error: %s", e)
+        except ValueError as e:
+            logging.error("Inbox JSON error: %s", e)
         time.sleep(5)
-    print("[×] No Facebook message received.")
+    logging.error("No Facebook message received.")
     return None
 
 # إنشاء حساب فيسبوك
@@ -102,7 +109,7 @@ def register_facebook_account(email, password, first_name, last_name, birthday):
     sig = ''.join(f'{k}={v}' for k, v in sorted_req)
     req['sig'] = hashlib.md5((sig + secret).encode()).hexdigest()
     response = _call("https://b-api.facebook.com/method/user.register", req)
-    print(f'[×] Facebook API Response: {response}')
+    logging.info("Facebook API Response: %s", response)
     if 'new_user_id' in response and 'session_info' in response and 'access_token' in response['session_info']:
         print(f'''
 [+] Email     : {email}
@@ -114,7 +121,7 @@ def register_facebook_account(email, password, first_name, last_name, birthday):
 [+] Token     : {response["session_info"]["access_token"]}
 ============================================''')
     else:
-        print('[×] Registration Failed.')
+        logging.error('Registration Failed.')
 
 # الاتصال بواجهة Facebook API
 def _call(url, params, post=True):
@@ -124,9 +131,11 @@ def _call(url, params, post=True):
     try:
         res = requests.post(url, data=params, headers=headers) if post else requests.get(url, params=params, headers=headers)
         return res.json()
-    except Exception as e:
-        print(f'[×] API Call Failed: {e}')
-        return {}
+    except requests.RequestException as e:
+        logging.error("API call failed: %s", e)
+    except ValueError as e:
+        logging.error("Invalid API response: %s", e)
+    return {}
 
 @app.route('/')
 def home():

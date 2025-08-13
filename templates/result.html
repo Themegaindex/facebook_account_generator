@@ -1,18 +1,42 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>النتائج</title>
+    <title>Ergebnisse der Kontogenerierung</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
+        .result { border: 1px solid #ccc; border-radius: 5px; padding: 15px; margin-bottom: 20px; }
+        .result-success { border-color: #28a745; }
+        .result-failure { border-color: #dc3545; }
+        h2 { border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        p { word-wrap: break-word; }
+        strong { color: #333; }
+    </style>
 </head>
 <body>
-    <h2>تم إنشاء الحسابات:</h2>
+    <h1>Ergebnisse der Kontogenerierung</h1>
+    <a href="/">&larr; Zurück zum Generator</a>
+    <hr>
+
     {% for r in results %}
-        <hr>
-        <p><strong>الإيميل:</strong> {{ r.email }}</p>
-        <p><strong>الاسم:</strong> {{ r.name }}</p>
-        <p><strong>كلمة المرور:</strong> {{ r.password }}</p>
-        <p><strong>تاريخ الميلاد:</strong> {{ r.birthday }}</p>
-        <p><strong>الرد:</strong> {{ r.response }}</p>
+        <div class="result {% if r.status == 'Abgeschlossen' %}result-success{% else %}result-failure{% endif %}">
+            <h3>Konto #{{ loop.index }} - Status: {{ r.status }}</h3>
+
+            {% if r.status == 'Fehlgeschlagen' %}
+                <p><strong>Grund:</strong> {{ r.message }}</p>
+            {% else %}
+                <p><strong>Name:</strong> {{ r.name }}</p>
+                <p><strong>Geburtstag:</strong> {{ r.birthday }}</p>
+                <p><strong>E-Mail:</strong> {{ r.email }}</p>
+                <p><strong>Passwort:</strong> {{ r.password }}</p>
+                <hr>
+                <p><strong>Facebook API-Antwort:</strong></p>
+                <pre><code>{{ r.fb_response | tojson(indent=2) }}</code></pre>
+                <hr>
+                <p><strong>E-Mail-Verifizierungsstatus:</strong> {{ r.verification_status }}</p>
+            {% endif %}
+        </div>
     {% endfor %}
+
 </body>
 </html>

@@ -1,94 +1,72 @@
 from flask import Flask, render_template, request
-import requests, random, string, json, hashlib, time
-from faker import Faker
-from datetime import datetime
+from generator_lib import api
+import os
+
+# Laden der Umgebungsvariablen aus einer .env-Datei (optional, für die Entwicklung)
+# In einer Produktionsumgebung sollten diese Variablen direkt gesetzt werden.
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__)
-fake = Faker()
-
-def generate_random_string(length):
-    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
-
-def get_mail_domains():
-    try:
-        res = requests.get("https://api.mail.tm/domains")
-        return res.json()['hydra:member'] if res.status_code == 200 else None
-    except:
-        return None
-
-def create_mail_tm_account():
-    domains = get_mail_domains()
-    if domains:
-        domain = random.choice(domains)['domain']
-        username = generate_random_string(10)
-        password = fake.password()
-        email = f"{username}@{domain}"
-        payload = {"address": email, "password": password}
-        res = requests.post("https://api.mail.tm/accounts", json=payload)
-        if res.status_code == 201:
-            return email, password, fake.first_name(), fake.last_name(), fake.date_of_birth(minimum_age=18, maximum_age=45)
-    return None, None, None, None, None
-
-def register_facebook_account(email, password, first_name, last_name, birthday):
-    api_key = '882a8490361da98702bf97a021ddc14d'
-    secret = '62f8ce9f74b12f84c123cc23437a4a32'
-    gender = random.choice(['M', 'F'])
-    req = {
-        'api_key': api_key,
-        'attempt_login': True,
-        'birthday': birthday.strftime('%Y-%m-%d'),
-        'client_country_code': 'EN',
-        'fb_api_caller_class': 'com.facebook.registration.protocol.RegisterAccountMethod',
-        'fb_api_req_friendly_name': 'registerAccount',
-        'firstname': first_name,
-        'format': 'json',
-        'gender': gender,
-        'lastname': last_name,
-        'email': email,
-        'locale': 'en_US',
-        'method': 'user.register',
-        'password': password,
-        'reg_instance': generate_random_string(32),
-        'return_multiple_errors': True
-    }
-    sorted_req = sorted(req.items())
-    sig = ''.join(f'{k}={v}' for k, v in sorted_req)
-    req['sig'] = hashlib.md5((sig + secret).encode()).hexdigest()
-    return _call("https://b-api.facebook.com/method/user.register", req)
-
-def _call(url, params, post=True):
-    headers = {
-        'User-Agent': '[FBAN/FB4A;FBAV/35.0.0.48.273;FBDM/{density=1.33125,width=800,height=1205};FBLC/en_US;FBPN/com.facebook.katana;FBDV/Nexus 7;FBSV/4.1.1;FBBK/0;]'
-    }
-    try:
-        res = requests.post(url, data=params, headers=headers) if post else requests.get(url, params=params, headers=headers)
-        return res.json()
-    except:
-        return {}
 
 @app.route('/')
 def index():
+    """Zeigt die Startseite mit dem Formular an."""
     return render_template('index.html')
 
 @app.route('/generate', methods=['POST'])
 def generate():
+    """Verarbeitet die Formulareingabe, um Konten zu generieren."""
+    results = []
     try:
+        # Sicherstellen, dass die API-Schlüssel vorhanden sind, bevor wir anfangen
+        if not os.environ.get('FACEBOOK_API_KEY') or not os.environ.get('FACEBOOK_SECRET'):
+            return "Fehler: FACEBOOK_API_KEY und FACEBOOK_SECRET müssen als Umgebungsvariablen gesetzt sein.", 500
+
         count = int(request.form['count'])
-        results = []
-        for _ in range(count):
-            email, password, first_name, last_name, birthday = create_mail_tm_account()
-            if email:
-                fb_response = register_facebook_account(email, password, first_name, last_name, birthday)
+
+        for i in range(count):
+            print(f"--- Starte Generierung für Konto {i+1}/{count} ---")
+
+            # Schritt 1: Temporäre E-Mail erstellen
+            account_data = api.create_mail_tm_account()
+            if not all(account_data):
+                print("[×] E-Mail-Erstellung fehlgeschlagen.")
                 results.append({
-                    'email': email,
-                    'password': password,
-                    'name': f"{first_name} {last_name}",
-                    'birthday': birthday.strftime('%Y-%m-%d'),
-                    'response': fb_response
+                    'status': 'Fehlgeschlagen',
+                    'message': 'Konnte keine temporäre E-Mail erstellen.'
                 })
+                continue # Nächsten Versuch starten
+
+            email, password, first_name, last_name, birthday = account_data
+
+            # Schritt 2: Facebook-Konto registrieren
+            print(f"[*] Versuche, Facebook-Konto für {email} zu registrieren...")
+            fb_response = api.register_facebook_account(email, password, first_name, last_name, birthday)
+
+            # Schritt 3: E-Mail-Verifizierung (unabhängig vom FB-API-Ergebnis)
+            print(f"[*] Suche nach Verifizierungs-E-Mail für {email}...")
+            verification_content, verification_status = api.get_inbox_and_verify(email, password)
+
+            results.append({
+                'status': 'Abgeschlossen',
+                'email': email,
+                'password': password,
+                'name': f"{first_name} {last_name}",
+                'birthday': birthday.strftime('%d.%m.%Y'),
+                'fb_response': fb_response,
+                'verification_status': verification_status
+            })
+            print("--- Generierung abgeschlossen ---")
+
         return render_template('result.html', results=results)
+
     except Exception as e:
-        return f"حدث خطأ: {str(e)}"
+        # Allgemeiner Fehler-Fallback
+        print(f"Ein unerwarteter Fehler ist aufgetreten: {e}")
+        return f"Ein unerwarteter Fehler ist aufgetreten: {str(e)}", 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Stellt sicher, dass die App im Debug-Modus läuft, wenn sie direkt ausgeführt wird
+    # Host auf 0.0.0.0 setzen, um von außerhalb des Containers erreichbar zu sein (falls zutreffend)
+    app.run(debug=True, host='0.0.0.0', port=5000)
